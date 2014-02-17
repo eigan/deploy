@@ -1,0 +1,233 @@
+# Deploy bash script
+# Requirements:
+#    - Bash 4+
+#    - rsync
+#
+# Run -h for options
+
+# Do not init config file if it exist
+if [[ $1 = "init" ]] && [ -f "deploy.conf" ]; then
+    echo "deploy.conf already exists, aborting"
+    exit
+fi
+
+# create config file if it doesnt exist
+if [[ $1 = "init" ]] && [ ! -f "deploy.conf" ]; then
+    echo -e '# Uncomment to set name of your project (will be used with export_base)\n#project=$(basename "$(PWD)")\n\n# Uncomment to set where to export your project\n#export_base="$HOME/projects/"\n\n# Uncomment to set own git remote. \n# Default is the git remote of the current folder\n#git_remote=$(git config --get remote.origin.url)\n\n# Ucomment to set default branch\n#git_branch="master"\n\n# Rsync arguments\nrsync_args=""\n\n# Servers\n# These are servers we can push to\nservers["example"]="example.no:/path/to/code/"\n\n\n# Function to compile stuff before syncing\n# This might be sass/less/js etc\n# We are now inside the export dir, no need to cd into it\n# 0 = true\n# 1 = false\nfunction compile {\n    return 0\n}\n\n# Check if ready for pushing to server\n# 0 = true\n# 1 = false\n# We are now inside the export dir, no need to cd into it\nfunction check() {\n    return 0\n}\n\n# Run before a sync\nfunction beforeDeploy() {\n    :\n}\n\n# Run after a sync\nfunction afterDeploy() {\n    :\n}\n' > deploy.conf
+
+    echo "created deploy.conf. Please edit it"
+    exit
+fi
+
+# Requires bash version 4 or higher
+if [[ $BASH_VERSINFO < 4 ]]; then
+    echo "You need bash version 4"
+    exit
+fi
+
+# Only used for export_path, finds the current folder
+project=$(basename "$(PWD)")
+
+# Basepath for where you have your exports
+export_base="$HOME/projects/"
+
+# repo to checkout and into the export dir
+git_remote=$(git config --get remote.origin.url)
+
+# git branch to checkout
+git_branch="master"
+
+# arguments for rsync
+rsync_args=""
+
+# key in the servers array
+if [[ ! $1 = -* ]] && [[ ! -z $1 ]]; then
+    server_key=$1
+    shift 1
+else
+    server_key="none"
+fi
+
+# Display list of options available?
+showHelp=false
+
+# Run until start commands?
+testMode=false
+
+# Display extra info?
+verbose=false
+
+# do not ask for confirmation
+force=false
+
+# default path to config
+config_file="deploy.conf"
+
+# Get the options
+while getopts "b:c:hs:tvf" flag; do
+  case "${flag}" in
+    b) git_branch="${OPTARG}" ;;
+    c) config_file="${OPTARG}" ;;
+    f) force=true ;;
+    h) showHelp=true ;;
+    s) server_key="${OPTARG}" ;;
+    t) testMode=true ;;
+    v) verbose=true ;;
+  esac
+done
+
+# Functions for cleanup / prepare
+function beforeDeploy() { :; }
+function afterDeploy() { :; }
+
+# Declare servers as array
+declare -A servers
+
+# Prepare to read config file, check that it exist
+if [[ ! -f $config_file ]]; then
+    echo "Could not open $config_file, use '$(basename $0) init' to create example file"
+    exit
+fi
+
+# Include the project deploy config
+. $config_file
+
+# export dir is where we want to temp store our git-repo
+# Set export_base or project in your deploy.conf
+export_path="$export_base$project/"
+
+# Check that the export base is writeable
+if [[ ! -w $export_base ]]; then
+    echo "Export base is not writeable: $export_base"
+    exit
+fi
+
+# Check if compile function exists
+if ! type -t compile | grep -i function > /dev/null; then
+    echo "compile function does not exist. Please create it in deploy.conf"
+    exit
+fi
+
+# Check if check function exists
+if ! type -t check | grep -i function > /dev/null; then
+    echo "check function does not exist. Please create it in deploy.conf."
+    exit
+fi
+
+# if -h, print the help screen
+if [[ $showHelp = true ]];
+then
+    echo "Usage $(basename $0) <server> [OPTIONS]"
+    echo "Usage $(basename $0) init (creates the deploy.conf)"
+    echo ""
+    echo -e "Option\t\tMeaning"
+    echo -e "init\t\tCreates the deploy.conf file"
+    echo -e "-b <branch>\tThe git branch"
+    echo -e "-c <file>\tPath to config file (default: deploy.conf)"
+    echo -e "-h\t\tThis help screen"
+    echo -e "-s <server>\tThe server (defined in deploy.conf)"
+    echo -e "-t\t\tRun in testmode, will stop before we start executing"
+    echo -e "-v\t\tDisplay extra info about whats going on"
+    exit
+fi
+
+# Set the server with the -s option, where -s is the key in the servers array
+server="${servers[$server_key]}"
+
+# Check if server isset 
+if [ -z $server ]
+then
+    echo -e "\e[31mInvalid server: '$server_key'\e[0m"
+    for key in "${!servers[@]}"; do echo -e "\e[1m$key\e[0m - ${servers["$key"]}"; done
+    exit
+fi
+
+# If verbose, print current options
+if [ $verbose = true ]; then
+    echo "-----------"
+    echo -e "\e[1mconfig file\e[0m=$config_file\n\e[1mdestination\e[0m=$server, \e[1mgit_branch\e[0m=$git_branch\n\e[1mgit\e[0m=$git_remote, \e[1mexport\e[0m=$export_path"
+    echo "-----------"
+fi
+
+if [ $testMode = true ]; then
+    exit
+fi
+
+
+
+# ===========================
+# Start running commands
+# ===========================
+
+# Remove the folder if it exists
+rm -rf $export_path
+
+# Clone it into the export dir
+cmd_clone_repo=$(git clone $git_remote $export_path --quiet 2>&1)
+if [[ $cmd_clone_repo = *error* ]] || [[ $cmd_clone_repo = *fatal* ]]
+then
+    echo -e "\e[31mError:\e[0m when cloning repo '$git_remote', does it exist?"
+    if [ $verbose = true ]; then echo -e "Message: $cmd_clone_repo"; fi
+    exit
+fi
+
+# Go into the export dir
+cd $export_path
+
+# Checkout the git_branch, default is master. Alerts if branch not found
+cmd_switch_branch=$(git checkout $git_branch 2>&1)
+if [[ $cmd_switch_branch = *error* ]]
+then
+    echo -e "\e[31mError:\e[0m when switching branch to '$git_branch', does it exist?"
+    if [ $verbose = true ]; then echo -e "Message: $cmd_switch_branch"; fi
+    exit
+fi
+
+# Run the user-defined compile function
+compile_result=$(compile 2>&1)
+
+# if verbose and compile_result is not empty
+if [ $verbose = true ] && [ ! -z "$compile_result" ]
+then
+    echo -e "\e[1mCompile result\e[0m: $compile_result"
+fi
+
+# check the code by running the user-defined check function
+if $(check);
+then
+    # If verbose mode, echo status
+    echo -e "\e[32mTest success\e[0m"
+else
+    # Test failed, stop execution
+    echo -e "\e[31mTest failed\e[0m"
+    exit
+fi
+
+if [[ $force = true ]]; then
+    go=true
+else
+    # Verify to go live with changes
+    go=false
+    echo -e "Do you wish to push contents of \e[1m$export_path\e[0m to \e[1m$server\e[0m"
+    select yn in "Yes" "No"; do
+        case $yn in
+            Yes ) go=true; break;;
+            No ) go=false; break;;
+        esac
+    done
+fi
+
+# if no, stop execution
+if [ $go = false ]; then
+    exit
+fi
+
+# Ready for syncing to server
+# first run the beforeDeploy function (can be defined in deploy.conf)
+beforeDeploy
+
+# Do the rsync
+rsync $rsync_args $export_path $server
+
+# then run afterDeploy (can be defined in deploy.conf)
+afterDeploy
