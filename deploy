@@ -13,7 +13,7 @@ fi
 
 # create config file if it doesnt exist
 if [[ $1 = "init" ]] && [ ! -f "deploy.conf" ]; then
-    echo -e '# Uncomment to set name of your project (will be used with export_base)\n#project=$(basename "$(PWD)")\n\n# Uncomment to set where to export your project\n#export_base="$HOME/projects/"\n\n# Uncomment to set own git remote. \n# Default is the git remote of the current folder\n#git_remote=$(git config --get remote.origin.url)\n\n# Ucomment to set default branch\n#git_branch="master"\n\n# Rsync arguments\nrsync_args=""\n\n# Servers\n# These are servers we can push to\nservers["example"]="example.no:/path/to/code/"\n\n\n# Function to compile stuff before syncing\n# This might be sass/less/js etc\n# We are now inside the export dir, no need to cd into it\n# 0 = true\n# 1 = false\nfunction compile {\n    return 0\n}\n\n# Check if ready for pushing to server\n# 0 = true\n# 1 = false\n# We are now inside the export dir, no need to cd into it\nfunction check() {\n    return 0\n}\n\n# Run before a sync\nfunction beforeDeploy() {\n    :\n}\n\n# Run after a sync\nfunction afterDeploy() {\n    :\n}\n' > deploy.conf
+    echo -e '# Uncomment to set name of your project (will be used with export_base)\n#project=$(basename "$(PWD)")\n\n# Uncomment to set where to export your project\n#export_base="$HOME/projects/"\n\n# Uncomment to set own git remote. \n# Default is the git remote of the current folder\n#git_remote=$(git config --get remote.origin.url)\n\n# Ucomment to set default branch\n#git_branch="master"\n\n# Rsync arguments\nrsync_args="-azg"\n\n# Servers\n# These are servers we can push to\nservers["example"]="example.no:/path/to/code/"\n\n\n# Function to compile stuff before syncing\n# This might be sass/less/js etc\n# We are now inside the export dir, no need to cd into it\n# 0 = true\n# 1 = false\nfunction compile {\n    return 0\n}\n\n# Check if ready for pushing to server\n# 0 = true\n# 1 = false\n# We are now inside the export dir, no need to cd into it\nfunction check() {\n    return 0\n}\n\n# Run before a sync\nfunction beforeDeploy() {\n    :\n}\n\n# Run after a sync\nfunction afterDeploy() {\n    :\n}\n' > deploy.conf
 
     echo "created deploy.conf. Please edit it"
     exit
@@ -159,17 +159,22 @@ fi
 # Start running commands
 # ===========================
 
-# Remove the folder if it exists
-rm -rf $export_path
-
-# Clone it into the export dir
-cmd_clone_repo=$(git clone $git_remote $export_path --quiet 2>&1)
-if [[ $cmd_clone_repo = *error* ]] || [[ $cmd_clone_repo = *fatal* ]]
-then
-    echo -e "\e[31mError:\e[0m when cloning repo '$git_remote', does it exist?"
-    if [ $verbose = true ]; then echo -e "Message: $cmd_clone_repo"; fi
-    exit
+# Use git pull instead of git clone if the export folder exist
+if [[ -d $export_path ]]; then
+    cd $export_path
+    cmd_pull_repo=$(git pull 2>&1)
+    if [ $verbose = true ]; then echo -e "Pull repo: $cmd_pull_repo"; fi
+else
+    # Clone it into the export dir
+    cmd_clone_repo=$(git clone $git_remote $export_path --quiet 2>&1)
+    if [[ $cmd_clone_repo = *error* ]] || [[ $cmd_clone_repo = *fatal* ]]
+    then
+        echo -e "\e[31mError:\e[0m when cloning repo '$git_remote', does it exist?"
+        if [ $verbose = true ]; then echo -e "Message: $cmd_clone_repo"; fi
+        exit
+    fi
 fi
+
 
 # Go into the export dir
 cd $export_path
@@ -179,9 +184,11 @@ cmd_switch_branch=$(git checkout $git_branch 2>&1)
 if [[ $cmd_switch_branch = *error* ]]
 then
     echo -e "\e[31mError:\e[0m when switching branch to '$git_branch', does it exist?"
-    if [ $verbose = true ]; then echo -e "Message: $cmd_switch_branch"; fi
     exit
 fi
+
+# Echo out switch branch result if verbose
+if [ $verbose = true ]; then echo -e "Switch branch: $cmd_switch_branch"; fi
 
 # Run the user-defined compile function
 compile_result=$(compile 2>&1)
