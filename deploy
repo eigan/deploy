@@ -162,6 +162,9 @@ fi
 # Use git pull instead of git clone if the export folder exist
 if [[ -d $export_path ]]; then
     cd $export_path
+    # reset first (adding locally removed files)
+    cmd_reset_repo=$(git reset HEAD --hard 2>&1)
+    # get new data
     cmd_pull_repo=$(git pull 2>&1)
     if [ $verbose = true ]; then echo -e "Pull repo: $cmd_pull_repo"; fi
 else
