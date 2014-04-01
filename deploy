@@ -13,7 +13,7 @@ fi
 
 # create config file if it doesnt exist
 if [[ $1 = "init" ]] && [ ! -f "deploy.conf" ]; then
-    echo -e '# Uncomment to set name of your project (will be used with export_base)\n#project=$(basename "$(PWD)")\n\n# Uncomment to set where to export your project\n#export_base="$HOME/projects/"\n\n# Uncomment to set own git remote. \n# Default is the git remote of the current folder\n#git_remote=$(git config --get remote.origin.url)\n\n# Ucomment to set default branch\n#git_branch="master"\n\n# Rsync arguments\nrsync_args="-azg"\n\n# Servers\n# These are servers we can push to\nservers["example"]="example.no:/path/to/code/"\n\n\n# Function to compile stuff before syncing\n# This might be sass/less/js etc\n# We are now inside the export dir, no need to cd into it\n# 0 = true\n# 1 = false\nfunction compile {\n    return 0\n}\n\n# Check if ready for pushing to server\n# 0 = true\n# 1 = false\n# We are now inside the export dir, no need to cd into it\nfunction check() {\n    return 0\n}\n\n# Run before a sync\nfunction beforeDeploy() {\n    :\n}\n\n# Run after a sync\nfunction afterDeploy() {\n    :\n}\n' > deploy.conf
+    echo -e '# Uncomment to set name of your project (will be used with export_base)\n#project=$(basename "$(pwd)")\n\n# Uncomment to set where to export your project\n#export_base="$HOME/projects/"\n\n# Uncomment to set own git remote. \n# Default is the git remote of the current folder\n#git_remote=$(git config --get remote.origin.url)\n\n# Ucomment to set default branch\n#git_branch="master"\n\n# Rsync arguments\nrsync_args="-azg"\n\n# Servers\n# These are servers we can push to\nservers["example"]="example.no:/path/to/code/"\n\n\n# Function to compile stuff before syncing\n# This might be sass/less/js etc\n# We are now inside the export dir, no need to cd into it\n# 0 = true\n# 1 = false\nfunction compile {\n    return 0\n}\n\n# Check if ready for pushing to server\n# 0 = true\n# 1 = false\n# We are now inside the export dir, no need to cd into it\nfunction check() {\n    return 0\n}\n\n# Run before a sync\nfunction beforeDeploy() {\n    :\n}\n\n# Run after a sync\nfunction afterDeploy() {\n    :\n}\n' > deploy.conf
 
     echo "created deploy.conf. Please edit it"
     exit
@@ -26,7 +26,7 @@ if [[ $BASH_VERSINFO < 4 ]]; then
 fi
 
 # Only used for export_path, finds the current folder
-project=$(basename "$(PWD)")
+project=$(basename "$(pwd)")
 
 # Basepath for where you have your exports
 export_base="$HOME/projects/"
